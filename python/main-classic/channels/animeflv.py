@@ -17,14 +17,12 @@ if config.is_xbmc():
 	from channels import renumbertools
 if not config.is_xbmc():
 	from platformcode import platformtools
-	platformtools.dialog_notification("¡ALERTA!",
-                                                "El renumerado no funciona "
-                                                "en la version Plex o Mediaserver")
+	platformtools.dialog_notification("¡ALERTA!", "El renumerado no funciona ""en la version Plex o Mediaserver")
 HOST = "http://animeflv.net/"
 
 def mainlist(item):
     logger.info()
-
+    logger.info("iniciando prueba de log")
     itemlist = list()
 
     itemlist.append(Item(channel=item.channel, action="novedades_episodios", title="Últimos episodios", url=HOST))
@@ -33,7 +31,7 @@ def mainlist(item):
 
     itemlist.append(Item(channel=item.channel, title="Buscar por:"))
     itemlist.append(Item(channel=item.channel, action="search", title="    Título"))
-    itemlist.append(Item(channel=item.channel, action="search_section", title="    Género", url=HOST + "browse",
+    itemlist.append(Item(channel=item.channel, action="search_section", title="    Generos", url=HOST + "browse",
                          extra="genre"))
     itemlist.append(Item(channel=item.channel, action="search_section", title="    Tipo", url=HOST + "browse",
                          extra="type"))
@@ -185,7 +183,7 @@ def novedades_anime(item):
 
 def listado(item):
     logger.info()
-
+    
     data = httptools.downloadpage(item.url).data
     data = re.sub(r"\n|\r|\t|\s{2}|-\s", "", data)
     url_pagination = scrapertools.find_single_match(data, '<li class="active">.*?</li><li><a href="([^"]+)">')
@@ -228,9 +226,11 @@ def listado(item):
 
 def episodios(item):
     logger.info()
+    logger.info("iniciando prueba de episodios")
     itemlist = []
 
     data = httptools.downloadpage(item.url).data
+    originalData = httptools.downloadpage(item.url).data
     data = re.sub(r"\n|\r|\t|\s{2}|-\s", "", data)
 
     # fix para renumbertools
@@ -241,52 +241,67 @@ def episodios(item):
 
     matches = re.compile('href="([^"]+)"><figure><img class="[^"]+" data-original="([^"]+)".+?</h3>'
                          '<p>(.*?)</p>', re.DOTALL).findall(data)
+    # /ver/18263/accel-world-26
+    # 
+    anime_info_matches = re.compile('anime_info = (.*?)];', re.DOTALL).findall(data)
+    anime_info_line = ""
+    anime_number ="0" #AnimeNumber
+    anime_name ="" #AnimeName
+    anime_id ="" #AnimeId
+    #var anime_info = ["759","Accel World","accel-world"];
+    
 
-    if matches:
-        for url, thumb, title in matches:
-            title = title.strip()
-            url = urlparse.urljoin(item.url, url)
-            # thumbnail = item.thumbnail
+    if anime_info_matches:
+        for full_line in anime_info_matches:
+            anime_info_line = full_line.strip()
+    
+    logger.info("encontrado " + anime_info_line.replace('[','').replace(']','').replace('"',''))        
+    split_anime_info = anime_info_line.replace('[','').replace(']','').replace('"','').split(',')
+    anime_number = split_anime_info[0]
+    anime_name = split_anime_info[1]
+    anime_id = split_anime_info[2]
+    
 
-            try:
-                episode = int(scrapertools.find_single_match(title, "^.+?\s(\d+)$"))
-            except ValueError:
-                season = 1
-                episode = 1
-            else:
-                if config.is_xbmc():
-                 season, episode = renumbertools.numbered_for_tratk(item.channel, item.show, 1, episode)
-                if not config.is_xbmc():
-                 season = 1
+    episodes_line = ""
+    episodes_matches = re.compile('episodes = (.*?);', re.DOTALL).findall(data)
+    if episodes_matches:
+        for full_line in episodes_matches:
+            episodes_line = full_line.strip()    
+    #var episodes = [[26,18263],[25,17139]];
+    split_episodes_list = episodes_line.replace('[','').replace(']','').replace(';','').replace('var','').replace('episodes','').replace('=','').replace(' ','').split(',')
+    numerador = 0
+    numero_episodio =0
+    numero_episodio_id =0
+    for dato in split_episodes_list:
+        if numerador < 1:
+            numero_episodio = dato
+        numerador=numerador + 1
+        if numerador > 1:
+            numerador = 0
+            numero_episodio_id = dato
+            episode_url = '/ver/' + str(numero_episodio_id) + '/' + anime_id + '-' + str(numero_episodio) + ''
 
-            title = "%s: %sx%s" % (item.title, season, str(episode).zfill(2))
-
-            itemlist.append(item.clone(action="findvideos", title=title, url=url, thumbnail=thumb, fulltitle=title,
-                                       fanart=item.thumbnail, contentType="episode"))
-    else:
-        # no hay thumbnail
-        matches = re.compile('<a href="(/ver/[^"]+)"[^>]+>(.*?)<', re.DOTALL).findall(data)
-
-        for url, title in matches:
-            title = title.strip()
-            url = urlparse.urljoin(item.url, url)
+            logger.info("encontrado url " + str(episode_url))  
+            title = anime_name.strip()
+            url = urlparse.urljoin(item.url, episode_url)
             thumb = item.thumbnail
 
             try:
-                episode = int(scrapertools.find_single_match(title, "^.+?\s(\d+)$"))
+                episode = int(numero_episodio)
             except ValueError:
                 season = 1
                 episode = 1
             else:
                 if config.is_xbmc():
-                 season, episode = renumbertools.numbered_for_tratk(item.channel, item.show, 1, episode)
+                    season, episode = renumbertools.numbered_for_tratk(item.channel, item.show, 1, episode)
                 if not config.is_xbmc():
-                 season = 1
+                    season = 1
 
             title = "%s: %sx%s" % (item.title, season, str(episode).zfill(2))
 
             itemlist.append(item.clone(action="findvideos", title=title, url=url, thumbnail=thumb, fulltitle=title,
-                                       fanart=item.thumbnail, contentType="episode"))
+                                        fanart=item.thumbnail, contentType="episode"))
+
 
     return itemlist
 
